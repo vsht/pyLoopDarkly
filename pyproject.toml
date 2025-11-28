@@ -1,0 +1,33 @@
+[project]
+name = "pyLoopDarkly"
+version = "0.1"
+
+
+authors = [
+  {name = "Vladyslav Shtabovenko", email = "dev.vsht@posteo.de"}
+]
+
+classifiers = [
+    "Development Status :: 1 - Planning",
+    "Environment :: Console",
+    "Intended Audience :: Science/Research",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Physics"
+]
+
+dependencies = [
+  "sympy"
+]
+
+requires-python = ">=3.13"
+description = 'A library library of tools for manipulating multiloop integrals and topologies.'
+license = "GPL-3.0-or-later"
+license-files = [
+    "LICENSE"
+]
+readme = "README.md"
+
+[project.urls]
+Homepage = "https://github.com/vsht/pyLoopDarkly"
