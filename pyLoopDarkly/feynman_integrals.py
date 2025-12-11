@@ -7,6 +7,7 @@ Feynman-parametric integrals
 
 """
 
+import math
 import sympy as sp
 
 class fcsp(sp.Function): # pylint: disable=invalid-name
@@ -144,7 +145,7 @@ def build_uf(old_u : sp.core.expr, old_f : sp.core.expr,
     return (sp.expand(sp.together(la*old_u)),sp.together(j-num/(4*la)))
 
 
-def feynman_prepare(props: list, lmoms : list, fp_suffix='x') -> (sp.core.expr,sp.core.expr):
+def feynman_prepare(props: list, lmoms : list, **kwargs) -> (sp.core.expr,sp.core.expr):
     """Calculates Symanzik polynomials U and F from the given list of inverse
     propagators props and loop momenta lmoms
 
@@ -166,6 +167,8 @@ def feynman_prepare(props: list, lmoms : list, fp_suffix='x') -> (sp.core.expr,s
     if not isinstance(props, list):
         raise TypeError('props shoud be a list')
 
+    fp_suffix=kwargs.get('fp_suffix','x')
+
     u_poly, f_poly = 1, propagators_join(props,x=fp_suffix)
 
     for l in lmoms:
@@ -173,3 +176,99 @@ def feynman_prepare(props: list, lmoms : list, fp_suffix='x') -> (sp.core.expr,s
 
     fin_u,fin_f = u_poly, -sp.simplify(sp.together(u_poly*f_poly))
     return fin_u,sp.expand(fin_f)
+
+
+def feynman_parametrize(props: list, pows: list, lmoms : list, **kwargs) -> (sp.core.expr,sp.core.expr,list):
+    """Calculates Feynman parametrization of the given loop integral returning an integral
+    in the Feynman parameters x_i
+
+    Args:
+        props (list): list of inverse propagators, e.g.
+            props=[fcsp(k1,k1) - m1**2,fcsp(k1-p1,k1-p1) - m2**2,fcsp(k1-p2,k1-p2) - m3**2]
+        lmoms (list): list of loop momemnta, e.g. [k1]
+    Raises:
+        TypeError: if props is not a list
+        TypeError: if lmoms is not a list
+        TypeError: if pows is not a list
+
+    Returns:
+        _type_: _description_
+    """
+    if not isinstance(lmoms, list):
+        raise TypeError('lmoms shoud be a list')
+    if not isinstance(props, list):
+        raise TypeError('props shoud be a list')
+    if not isinstance(pows, list):
+        raise TypeError('pows shoud be a list')
+
+
+    fp_suffix       = kwargs.get('fp_suffix','x')
+    dim_d           = kwargs.get('dim',sp.symbols('d'))
+    replace_dim     = kwargs.get('replace_dim',[])
+    prefactor       = kwargs.get('prefactor','Multiloop1')
+    extra_prefactor = kwargs.get('extra_prefactor',1)
+
+    n_props         = len(pows)
+    n_loops         = len(lmoms)
+    f_pow           = sum(pows) - n_loops*dim_d/2
+    inverse_measure = (sp.I*sp.pi**(dim_d/2))**n_loops
+
+    prop_powers_hat         = [max(0,-math.floor(x)) for x in pows]
+    prop_powers_tilde_raw   = [x+y for x,y in zip(pows,prop_powers_hat)]
+    xpars_raw               = [sp.symbols('x'+str(i+1)) for i in range(n_props)]
+
+    prefactor_val = 1
+    if prefactor=='Unity':
+        prefactor_val = inverse_measure
+    elif prefactor=='Textbook':
+        prefactor_val = inverse_measure/(2*sp.pi)**(dim_d*n_loops)
+    elif prefactor=='Multiloop1':
+        pass
+    elif prefactor=='Multiloop2':
+        prefactor_val = sp.exp(n_loops*sp.EulerGamma*(4-dim_d)/2)
+    else:
+        raise TypeError("Invalid value of the prefactor option.")
+
+    # prop_powers_tilde contains no zero powers
+    prop_powers_tilde = [x for x in prop_powers_tilde_raw if x!=0]
+
+    #x_i linked to zero powers in prop_powers_tilde_raw
+    zero_den_vars=[x[1] for x in zip(prop_powers_tilde_raw,xpars_raw) if x[0]==0]
+
+    # xpars contains no x_i related to zero powers
+    xpars=[x[1] for x in zip(prop_powers_tilde_raw,xpars_raw) if x[0]!=0]
+
+    #x_i linked to nonzero powers in prop_powers_hat
+    num_vars=[x[1] for x in zip(prop_powers_hat,xpars_raw) if x[0]!=0]
+
+    prop_powers_hat = [x for x in prop_powers_hat if x!=0]
+
+    fp_pref = 1
+    for x,n in zip(xpars,prop_powers_tilde):
+        fp_pref*= x**(n-1)
+
+
+    u,f = feynman_prepare(props, lmoms, fp_suffix=fp_suffix)
+    fp_int = u**(f_pow-dim_d/2)/f**f_pow
+
+    # here we do the differentiation using num_vars and prop_powers_hat
+    for x,n in zip(num_vars,prop_powers_hat):
+        fp_int=(-1)**n*sp.diff(fp_int,x,n)
+
+    for x in zero_den_vars:
+        u,f,fp_int = u.subs(x,0), f.subs(x,0),fp_int.subs(x,0)
+
+    fp_int = fp_pref*fp_int
+
+    pref = extra_prefactor*sp.gamma(f_pow)/math.prod(map(sp.gamma,prop_powers_tilde))
+
+    pref = pref*(-1)**sum(pows)*prefactor_val
+
+
+    if replace_dim!=[]:
+        fp_int=fp_int.subs(replace_dim[0],replace_dim[1])
+        pref=pref.subs(replace_dim[0],replace_dim[1])
+
+    fp_int = sp.powsimp(sp.factor(fp_int))
+
+    return (fp_int,pref,xpars)
